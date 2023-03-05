@@ -221,7 +221,7 @@ def main():
     # Recalculate Prediction Rank
     final_ranking = np.argsort(new_user_pred)
 
-    predicted_item_id = [index for rank, index in enumerate(final_ranking) if rank < 3]
+    predicted_item_id = [index for rank, index in enumerate(final_ranking) if rank < k]
 
     predicted_item_name = [name for name, index in item_map.items() if index in predicted_item_id]
 
