@@ -36,14 +36,29 @@ def item_mapping(item_set):
         final_set.add(item_map[item])
     return final_set
 
-def predict_new_rank(user_id_list, train_interaction, test_interaction):
+# prediction function New!
+def predict_new_rank(user_id_list, train_interaction, test_interaction, model):
 
-    pred_interaction = np.zeros((train_interaction.shape[0], train_interaction.shape[1]))
+    import datetime
+
+    init_time = datetime.datetime.now()
+
+    pred_interaction = np.zeros((train_interaction.shape[0], len(item_map)))
+
+    n_user = len(user_map) # to be removed
+    check_point = n_user//100  # to be removed
     interaction_cnt = test_interaction.sum(axis=1)
 
-    for user_id in user_id_list:
+    for user_index, a_user in enumerate(user_id_list):
 
-        if interaction_cnt[user_id] > 0:
+        if user_index%check_point == 0:
+            print("{:.5%}".format(user_index/n_user)) # to be removed
+            delta = datetime.datetime.now() - init_time
+            print(f'Runtime {str(delta).split(".")[0]} Hour')
+
+        if interaction_cnt[user_index] > 0:
+
+            user_id = a_user  # to be decided whether user_id or user_name
 
             # Predict data as normal
             pred = model.predict(user_ids=user_id, item_ids=list(range(0, len(item_map), 1)))
@@ -54,32 +69,33 @@ def predict_new_rank(user_id_list, train_interaction, test_interaction):
 
             # Query negative leverage items
             # Create a list of all combination
+
             import itertools
-            all_txn_comb = set()
+            all_txn_comb = list()
             for L in range(1, len(user_input_txn) + 1):
                 for subset in itertools.combinations(user_input_txn, L):
-                    all_txn_comb = all_txn_comb.union({frozenset(subset)})
+                    all_txn_comb.append(set(subset))
 
             # query negative
             remove_set = set()
             for idx, row in df_negative.iterrows():
-                if row['antecedents_set'] in all_txn_comb:
-                    remove_set = remove_set.union(item_mapping(row['consequents']))
-
+                for txn in all_txn_comb:
+                    if txn == row['antecedents_set']:
+                        remove_set = remove_set.union(item_mapping(row['consequents']))
             # query positive
             add_set = set()
             for idx, row in df_positive.iterrows():
-                if row['antecedents_set'] in all_txn_comb:
-                    add_set = add_set.union(item_mapping(row['consequents']))
-
+                for txn in all_txn_comb:
+                    if txn == row['antecedents_set']:
+                        add_set = add_set.union(item_mapping(row['consequents']))
             new_pred = np.copy(pred) # to be removed
 
             # replace the prediction score with negative meaning value
-            new_pred[list(add_set)] = 99 # max score
-            new_pred[list(remove_set)] = 0 # min score
+            new_pred[list(add_set)] = 99
+            new_pred[list(remove_set)] = 0 # to be desired on the value
 
             # create prediction interaction matrix
-            indices = np.argsort(pred)[::-1]
+            indices = np.argsort(new_pred)[::-1]
 
             # predict rank
             tmp_interaction = indices.argsort()
@@ -89,11 +105,11 @@ def predict_new_rank(user_id_list, train_interaction, test_interaction):
 
         else:
 
-            pred_interaction[user_id] = np.zeros((1, len(item_map)))
+            pred_interaction[a_user] = np.zeros((1, len(item_map)))
 
     from scipy import sparse
 
-    pred_interaction = sparse.csr_matrix(pred_interaction)
+    pred_interaction = sparse.coo_matrix(pred_interaction)
 
     return pred_interaction
 
@@ -179,7 +195,7 @@ def main():
     st.subheader('Predicted user preferences')
 
     # Generate Prediction for k top categories
-    k = st.slider("Please select number of top k predictions.", 1, 10, step = 1)
+    k = st.slider("Please top k predictions.", 1, 10, step = 1)
 
     new_user_preference_index = [v for k, v in item_map.items() if k in new_user_preference]
 
@@ -196,18 +212,20 @@ def main():
     # Predict using new logic
     pred = predict_new_rank(user_id_list=(range(0,len(user_map)+1,1))
                             , train_interaction=new_coo
-                            , test_interaction=csr_matrix(temp_interaction))
+                            , test_interaction=csr_matrix(temp_interaction)
+                            , model=model)
 
     new_user_pred = pred.toarray()[-1]
     new_user_pred[new_user_preference_index] = 99
 
     # Recalculate Prediction Rank
-    indices = np.argsort(new_user_pred)
-    final_ranking = indices.argsort()
+    final_ranking = np.argsort(new_user_pred)
 
-    predicted_item = [index for index, rank in enumerate(final_ranking) if rank < k]
+    predicted_item_id = [index for rank, index in enumerate(final_ranking) if rank < 3]
 
-    st.write([name for name, index in item_map.items() if index in predicted_item])
+    predicted_item_name = [name for name, index in item_map.items() if index in predicted_item_id]
+
+    st.write([predicted_item_name[i] for i in np.array(predicted_item_id).argsort()])
 
 if __name__ == '__main__':
     main()
