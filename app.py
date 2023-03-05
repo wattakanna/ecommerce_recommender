@@ -179,7 +179,7 @@ def main():
     st.subheader('Predicted user preferences')
 
     # Generate Prediction for k top categories
-    k = st.slider("Please top k predictions.", 1, 10, step = 1)
+    k = st.slider("Please select number of top k predictions.", 1, 10, step = 1)
 
     new_user_preference_index = [v for k, v in item_map.items() if k in new_user_preference]
 
