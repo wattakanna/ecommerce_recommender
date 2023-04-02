@@ -116,17 +116,20 @@ def predict_new_rank(user_id_list, train_interaction, test_interaction, model):
 # Create function for features
 def userInputFeatures():
 
-    user_type = st.sidebar.radio("Please select user type.",('Existing User', 'New User'))
+    user_type = st.sidebar.radio("Please select user type.",('Existing User', 'New User', 'Cold-start'))
 
     form = st.sidebar.form('Form')
 
     if user_type == "Existing User":
         user_id = form.selectbox('Existing userid', [user for user, index in user_map.items()][:1000]) # Limit 1000 user
 
+    elif user_type == "Cold-start":
+        form.write('Please hit submit.')
+        preference_dict = dict()
+
     else:
         # Create slider bar selection
         preference_cnt = form.slider('Number of Preference', 1, 10, step = 1)
-
 
         # Create dropdown of category
         preference_dict = dict()
@@ -153,17 +156,19 @@ def userInputFeatures():
     if user_type == "Existing User":
         user_preference_index = [index for index, value in enumerate(interactions.toarray()[user_map[data.loc[0,'user_id']],:]) if value == 1]
         new_user_preference = [category_code for category_code, index in item_map.items() if index in user_preference_index]
+    elif user_type == "Cold-start" :
+        new_user_preference = list()
     else:
         new_user_preference = list(data.iloc[0].values)
 
 
-    return new_user_preference
+    return new_user_preference, user_type
 
 def main():
     # Create sidebar
     st.sidebar.header('Input category preferences')
 
-    new_user_preference = userInputFeatures()
+    new_user_preference, user_type = userInputFeatures()
 
     # Header of page
     st.header(':orange[The ecommerce recommender system]')
@@ -197,35 +202,59 @@ def main():
     # Generate Prediction for k top categories
     k = st.slider("Please top k predictions.", 1, 10, step = 1)
 
-    new_user_preference_index = [v for k, v in item_map.items() if k in new_user_preference]
+    if user_type == "Cold-start":
+        category_ranking = ['appliances.personal.massager', 'electronics.clocks',
+         'electronics.audio.headphone', 'appliances.kitchen.refrigerators',
+         'appliances.environment.vacuum', 'computers.peripherals.printer',
+         'computers.desktop', 'electronics.camera.photo', 'electronics.video.tv',
+         'electronics.camera.video', 'computers.components.cooler',
+         'electronics.audio.subwoofer', 'electronics.smartphone',
+         'computers.components.power_supply', 'electronics.tablet',
+         'computers.notebook', 'electronics.audio.acoustic',
+         'electronics.video.projector', 'electronics.audio.microphone',
+         'electronics.audio.music_tools.piano', 'electronics.telephone',
+         'computers.peripherals.mouse', 'computers.ebooks',
+         'computers.components.motherboard', 'computers.components.videocards',
+         'computers.peripherals.monitor', 'computers.peripherals.camera',
+         'computers.components.memory', 'computers.components.cpu',
+         'computers.peripherals.keyboard', 'computers.components.hdd',
+         'computers.components.sound_card', 'computers.components.cdrw',
+         'electronics.audio.dictaphone']
 
-    new_interaction = np.zeros([1, len(item_map)])
-    new_interaction[:,new_user_preference_index] = 1
+        final_prediction_list = [name for rank, name in enumerate(category_ranking) if rank < k]
 
-    new_coo = vstack([interactions, new_interaction])
+    else:
+        new_user_preference_index = [v for k, v in item_map.items() if k in new_user_preference]
 
-    model.fit(interactions=new_coo)
+        new_interaction = np.zeros([1, len(item_map)])
+        new_interaction[:,new_user_preference_index] = 1
 
-    temp_interaction = np.zeros([len(user_map) + 1, len(item_map)])
-    temp_interaction[-1] = 1
+        new_coo = vstack([interactions, new_interaction])
 
-    # Predict using new logic
-    pred = predict_new_rank(user_id_list=(range(0,len(user_map)+1,1))
-                            , train_interaction=new_coo
-                            , test_interaction=csr_matrix(temp_interaction)
-                            , model=model)
+        model.fit(interactions=new_coo)
 
-    new_user_pred = pred.toarray()[-1]
-    new_user_pred[new_user_preference_index] = 99
+        temp_interaction = np.zeros([len(user_map) + 1, len(item_map)])
+        temp_interaction[-1] = 1
 
-    # Recalculate Prediction Rank
-    final_ranking = np.argsort(new_user_pred)
+        # Predict using new logic
+        pred = predict_new_rank(user_id_list=(range(0,len(user_map)+1,1))
+                                , train_interaction=new_coo
+                                , test_interaction=csr_matrix(temp_interaction)
+                                , model=model)
 
-    predicted_item_id = [index for rank, index in enumerate(final_ranking) if rank < k]
+        new_user_pred = pred.toarray()[-1]
+        new_user_pred[new_user_preference_index] = 99
 
-    predicted_item_name = [name for name, index in item_map.items() if index in predicted_item_id]
+        # Recalculate Prediction Rank
+        final_ranking = np.argsort(new_user_pred)
 
-    st.write([predicted_item_name[i] for i in np.array(predicted_item_id).argsort()])
+        predicted_item_id = [index for rank, index in enumerate(final_ranking) if rank < k]
+
+        predicted_item_name = [name for name, index in item_map.items() if index in predicted_item_id]
+
+        final_prediction_list = [predicted_item_name[i] for i in np.array(predicted_item_id).argsort()]
+
+    st.write(final_prediction_list)
 
 if __name__ == '__main__':
     main()
