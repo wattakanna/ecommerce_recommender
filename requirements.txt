@@ -1,6 +1,5 @@
 streamlit==1.17.0
 scipy
 lightfm
-pandas==1.4.4
+pandas
 numpy==1.23.5
-pickle
