@@ -11,7 +11,7 @@ import pickle
 def load_model():
 
     # Load development data
-    interactions, df_positive, df_negative, catecory_df, item_map, user_map = pickle.load(open('variable_environment.pkl','rb'))
+    interactions, df_positive, df_negative, catecory_df, item_map, user_map = pd.read_pickle(open('variable_environment.pkl','rb'))
     userid_df = pd.read_csv('user_id.csv').dropna()
 
     # Init model
